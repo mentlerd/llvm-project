@@ -1,5 +1,10 @@
 #include <functional>
 
+template<typename = bool, typename = int>
+struct Dummy {
+  // Used to make lambda host function's symbol more complex
+};
+
 int foo(int x, int y) { return x + y - 1; }
 
 struct Bar {
@@ -12,7 +17,7 @@ struct Bar {
   }
 };
 
-int foo2() {
+int foo2(Dummy<> dummy = {}) {
   auto f = [](int x) { return x + 1; };
 
   std::function<int(int)> foo2_f = f;
