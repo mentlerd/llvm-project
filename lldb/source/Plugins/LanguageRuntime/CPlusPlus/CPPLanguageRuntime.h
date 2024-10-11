@@ -29,6 +29,14 @@ public:
     Invalid
   };
 
+  struct UnwrappedLibCppFunction {
+    lldb::ValueObjectSP callable;
+    lldb::ModuleSP in_module;
+  };
+  
+  llvm::Expected<UnwrappedLibCppFunction>
+  UnwrapLibCppFunction(lldb::ValueObjectSP &valobj_sp);
+  
   struct LibCppStdFunctionCallableInfo {
     Symbol callable_symbol;
     Address callable_address;
@@ -38,6 +46,7 @@ public:
         LibCppStdFunctionCallableCase::Invalid;
   };
 
+  
   LibCppStdFunctionCallableInfo
   FindLibCppStdFunctionCallableInfo(lldb::ValueObjectSP &valobj_sp);
 
