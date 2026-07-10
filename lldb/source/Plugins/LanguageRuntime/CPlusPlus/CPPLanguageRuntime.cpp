@@ -353,8 +353,7 @@ CPPLanguageRuntime::FindLibCppStdFunctionCallableInfo(
       callable_t.IsMemberFunctionPointerType()) {
     // Target is a standard function pointer, or member function pointer.
     // In either case on Itanium both contain a function address
-    AddressType addr_type;
-    addr_t addr = wrapped.callable->GetPointerValue(&addr_type);
+    auto [addr, addr_type] = wrapped.callable->GetPointerValue();
     
     if (!addr || addr == LLDB_INVALID_ADDRESS)
       return optional_info;
@@ -423,8 +422,7 @@ CPPLanguageRuntime::FindLibCppStdFunctionCallableInfo(
     if (!sc.function)
       return optional_info;
     
-    Symbol* symbol = sc.function->GetAddressRange().GetBaseAddress()
-      .CalculateSymbolContextSymbol();
+    Symbol* symbol = sc.function->CalculateSymbolContextSymbol();
     if (!symbol)
       return optional_info;
     
