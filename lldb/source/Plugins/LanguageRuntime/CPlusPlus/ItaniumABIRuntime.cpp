@@ -14,6 +14,9 @@
 #include "lldb/Expression/FunctionCaller.h"
 #include "lldb/Utility/LLDBLog.h"
 
+#include "lldb/Symbol/VariableList.h"
+#include "lldb/ValueObject/ValueObjectVariable.h"
+
 using namespace lldb;
 using namespace lldb_private;
 
@@ -39,6 +42,61 @@ ItaniumABIRuntime::GetTypeInfo(ValueObject &in_value,
                 ": static-type = '%s' has vtable symbol '%s'\n",
                 in_value.GetPointerValue().address,
                 in_value.GetTypeName().GetCString(), symbol_name.str().c_str());
+
+      // clang emits DW_TAG_variable '__clang_vtable' inside the enclosing
+      // class, try looking for that before falling back to name based type
+      // lookup
+      if (ModuleSP module_sp =
+              vtable_info.symbol->CalculateSymbolContextModule()) {
+        auto vptr = vtable_info.addr.GetLoadAddress(&m_process->GetTarget());
+
+        // NOTE: vptr points at the 'address point', not the vtable itself
+        auto vtable = vptr - m_process->GetAddressByteSize() * 2;
+
+        VariableList vars;
+
+        // SymbolFile doesn't provide an API to lookup a global variable with a
+        // specific location, so we have to resort to an unbounded name lookup
+        module_sp->FindGlobalVariables(ConstString("__clang_vtable"),
+                                       CompilerDeclContext(), -1, vars);
+
+        LLDB_LOGF(log,
+                  "0x%16.16" PRIx64 ": found %zu __clang_vtable variables\n",
+                  in_value.GetPointerValue().address, vars.GetSize());
+
+        for (lldb::VariableSP var : vars) {
+          auto valobj = ValueObjectVariable::Create(m_process, var);
+          if (valobj->GetLoadAddress() != vtable)
+            continue;
+
+          auto type_sp = var->GetEnclosingType();
+          if (!type_sp)
+            continue;
+
+          if (!TypeSystemClang::IsCXXClassType(
+                  type_sp->GetForwardCompilerType()))
+            continue;
+
+          LLDB_LOGF(log,
+                    "0x%16.16" PRIx64
+                    ": static-type = '%s' has dynamic type: uid={0x%" PRIx64
+                    "}, type-name='%s'\n",
+                    in_value.GetPointerValue().address,
+                    in_value.GetTypeName().AsCString(""), type_sp->GetID(),
+                    type_sp->GetName().GetCString());
+
+          type_info.SetTypeSP(type_sp);
+
+          SetDynamicTypeInfo(vtable_info.addr, type_info);
+          return type_info;
+        }
+
+        LLDB_LOGF(log,
+                  "0x%16.16" PRIx64 ": __clang_vtable based lookup failed, "
+                  "falling back to demangled typename\n",
+                  in_value.GetPointerValue().address);
+      }
+
       // We are a C++ class, that's good.  Get the class name and look it
       // up:
       llvm::StringRef class_name = symbol_name;
