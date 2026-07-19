@@ -185,7 +185,102 @@ CPPLanguageRuntime::FindLibCppStdFunctionCallableInfo(
   if (!valobj_sp)
     return optional_info;
 
-  // Will reimplement
+  // std::function has many variants, try to disambiguate
+  ValueObjectSP func_as_base_ptr;
+  {
+    ValueObjectSP outer_f = valobj_sp->GetChildMemberWithName("__f_");
+    
+    if (!outer_f)
+      return optional_info; // Unrecognized implementation
+    
+    if (outer_f->IsPointerType()) {
+      // git: 3e519524c118651123eecf60c2bbc5d65ad9bac3
+      //
+      // class function<_Rp()> {
+      //   aligned_storage<3*sizeof(void*)>::type __buf_;
+      //   __base<_Rp>* __f_;
+      // }
+      
+      func_as_base_ptr = std::move(outer_f);
+    } else if (auto inner_f = outer_f->GetChildMemberWithName("__f_")) {
+      // git: 050b064f15ee56ee0b42c9b957a3dd0f32532394
+      //
+      // class function<_Rp(_ArgTypes...)> {
+      //   __value_func<_Rp(_ArgTypes...)> __f_;
+      // }
+      //
+      // class __value_func<_Rp(_ArgTypes...)> {
+      //   aligned_storage<3 * sizeof(void*)>::type __buf_;
+      //   __base<_Rp(_ArgTypes...)>* __f_;
+      // }
+      
+      func_as_base_ptr = std::move(inner_f);
+    } else {
+      return optional_info; // Unrecognized implementation
+    }
+  }
+  
+  // __base<...> is a pure virtual class with an interface to create/copy/destroy/invoke
+  // the underlying value. This interface is implemented by partial specializations of the
+  // __func<_Fp, _Alloc, ...> template where _Fp is the wrapped functor object
+  ValueObjectSP func_as_impl_ptr = func_as_base_ptr->GetDynamicValue(eDynamicDontRunTarget);
+  if (!func_as_impl_ptr)
+    return optional_info;
+  
+  Status status;
+  ValueObjectSP impl = func_as_impl_ptr->Dereference(status);
+  if (status.Fail())
+    return optional_info;
+  
+  // There are two specializations, one for holding generic callables, and one for holding
+  // ObjC blocks, these store their held value in different fields
+  ValueObjectSP callable = impl->GetChildMemberWithName("__func_");
+  if (!callable)
+    callable = impl->GetChildMemberWithName("__f_");
+  if (!callable)
+    return optional_info;
+
+  ModuleList& modules = callable->GetTargetSP()->GetImages();
+
+  // We are dealing with a lambda, or general callable. Look for operator()
+  SymbolContextList candidates;
+  {
+    CompilerType type = callable->GetCompilerType();
+    type.DumpTypeDescription(lldb::eDescriptionLevelVerbose);
+    
+    for (size_t idx = 0; idx < type.GetNumMemberFunctions(); idx++) {
+      TypeMemberFunctionImpl func = type.GetMemberFunctionAtIndex(idx);
+      
+      if (func.GetKind() != lldb::eMemberFunctionKindInstanceMethod)
+        continue;
+      if (func.GetName() != "operator()")
+        continue;
+    
+      modules.FindFunctionSymbols(func.GetMangledName(), lldb::eFunctionNameTypeFull, candidates);
+    }
+  }
+  
+  // Give up if we find nothing, or too much. Technically disambiguating
+  // between the call operators should be possible with CompilerType, but
+  // it is unsupported for now
+  if (candidates.GetSize() != 1)
+    return optional_info;
+  
+  Address target_addr = candidates[0].GetFunctionOrSymbolAddress();
+  
+  SymbolContext sym_ctx;
+  modules.ResolveSymbolContextForAddress(target_addr, lldb::eSymbolContextEverything, sym_ctx);
+  
+  optional_info.callable_symbol = *sym_ctx.symbol;
+  optional_info.callable_address = sym_ctx.GetFunctionOrSymbolAddress();
+  optional_info.callable_line_entry = sym_ctx.line_entry;
+
+  llvm::StringRef m = sym_ctx.function->GetName();
+  if (contains_lambda_identifier(m)) {
+    optional_info.callable_case = LibCppStdFunctionCallableCase::Lambda;
+  } else {
+    optional_info.callable_case = LibCppStdFunctionCallableCase::CallableObject;
+  }
 
   return optional_info;
 }
