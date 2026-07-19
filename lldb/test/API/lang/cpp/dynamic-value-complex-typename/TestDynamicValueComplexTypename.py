@@ -26,7 +26,11 @@ class DynamicValueComplexTypename(TestBase):
 
         # Check if we recognized the dynamic type. Most names are unreasonably
         # complex to match against exactly, but all should have a sane prefix
-        self.assertStartsWith(var.GetType().GetName(), type_prefix)
+        type_name = var.GetType().GetName()
+        self.assertTrue(
+            type_name.startswith(type_prefix),
+            f"Expected '{type_prefix}' prefix, got '{type_name}'",
+        )
 
         # Check if we resolved the compiler type too
         marker = var.Dereference().GetChildAtIndex(0)
