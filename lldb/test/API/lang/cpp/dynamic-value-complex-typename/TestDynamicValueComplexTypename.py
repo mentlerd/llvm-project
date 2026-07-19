@@ -7,7 +7,7 @@ from lldbsuite.test.decorators import *
 class DynamicValueComplexTypename(TestBase):
     @skipIf(compiler=no_match("clang"))
     @skipIf(compiler="clang", compiler_version=["<", "24.0"])  # __clang_vtable
-    @expectedFailureAll(debug_info=no_match(["dwarf", "dsym"]))  # Not implemented
+    @expectedFailureAll(debug_info=["pdb"])  # Not implemented
     @expectedFailureAll(oslist=["windows"])  # Not Itanium ABI
     def test(self):
         self.build()
