@@ -140,8 +140,6 @@ private:
   using OperatorStringToCallableInfoMap =
     llvm::StringMap<CPPLanguageRuntime::LibCppStdFunctionCallableInfo>;
 
-  OperatorStringToCallableInfoMap CallableLookupCache;
-
   lldb::BreakpointSP m_cxx_exception_bp_sp;
   ItaniumABIRuntime m_itanium_runtime;
 };
