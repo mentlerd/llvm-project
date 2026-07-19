@@ -1,43 +1,97 @@
 #include <functional>
 
-int foo(int x, int y) { return x + y - 1; }
+// Helper types
 
-struct Bar {
-  int operator()() { return 66; }
-  int add_num(int i) const { return i + 3; }
-  int add_num2(int i) {
-    std::function<int(int)> add_num2_f = [](int x) { return x + 1; };
+struct IntBox {
+  int value;
 
-    return add_num2_f(i); // Set break point at this line.
+  /* implicit */ IntBox(int value) : value(value) {}
+};
+
+template <typename A, typename B> struct Pair {};
+
+// std::function targets
+
+void Free(int) {
+  // freeBody
+}
+void FreeConverting(IntBox) {
+  // freeConvertingBody
+}
+
+struct Base {
+  void Member(int) {
+    // memberBody
+  }
+  void MemberConverting(IntBox) {
+    // memberConvertingBody
+  }
+
+  virtual void MemberVirtual(int) {}
+};
+
+struct Callable {
+  void operator()(int) {
+    // callableBody
+  }
+};
+struct CallableConverting {
+  void operator()(IntBox) {
+    // callableConvertingBody
+  }
+};
+struct CallableOverloaded {
+  void operator()(int) {
+    // callableOverloadedIntBody
+  }
+  void operator()(IntBox) {
+    // callableOverloadedIntBoxBody
   }
 };
 
-int foo2() {
-  auto f = [](int x) { return x + 1; };
-
-  std::function<int(int)> foo2_f = f;
-
-  return foo2_f(10); // Set break point at this line.
-}
-
-int main(int argc, char *argv[]) {
-  int acc = 42;
-  std::function<int(int, int)> f1 = foo;
-  std::function<int(int)> f2 = [acc, f1](int x) -> int {
-    return x + f1(acc, x);
+int main() {
+  // Normal cases
+  std::function<void(int)> free = Free;
+  std::function<void(int)> callable = Callable();
+  std::function<void(int)> lambda = [](int) {
+    // lambdaBody
   };
+  std::function<void(Base &, int)> member = &Base::Member;
 
-  auto f = [](int x, int y) { return x + y; };
-  auto g = [](int x, int y) { return x * y; };
-  std::function<int(int, int)> f3 = argc % 2 ? f : g;
+  // IntBox conversion occurs in __func<...>::operator()
+  std::function<void(int)> freeConverting = FreeConverting;
+  std::function<void(int)> callableConverting = CallableConverting();
+  std::function<void(int)> lambdaConverting = [](IntBox) {
+    // lambdaConvertingBody
+  };
+  std::function<void(Base &, int)> memberConverting = &Base::MemberConverting;
 
-  Bar bar1;
-  std::function<int()> f4(bar1);
-  std::function<int(const Bar &, int)> f5 = &Bar::add_num;
+  // Lambda's typename is complex
+  std::function<void(int)> lambdaComplex = [](Pair<int, Pair<int, int>> = {}) {
+    return [](int) {
+      // lambdaComplexBody
+    };
+  }();
 
-  int foo2_result = foo2();
-  int bar_add_num2_result = bar1.add_num2(10);
+  // Callable has overloaded operator()
+  std::function<void(int)> callableOverloadedInt = CallableOverloaded();
+  std::function<void(IntBox)> callableOverloadedIntBox = CallableOverloaded();
 
-  return f1(acc, acc) + f2(acc) + f3(acc + 1, acc + 2) + f4() +
-         f5(bar1, 10); // Set break point at this line.
+  // Member function is virtual
+  std::function<void(Base &, int)> memberVirtual = &Base::MemberVirtual;
+
+#if __has_feature(blocks)
+  // Block support
+  std::function<void(int)> block = ^void(int) {
+    // blockBody
+  };
+  std::function<void(int)> blockConverting = ^void(IntBox) {
+    // blockConvertingBody
+  };
+#endif
+
+  Free(0); // break 1
+  Free(0); // break 2
+
+  return 0;
 }
