@@ -39,6 +39,10 @@ public:
   lldb::ValueObjectSP GetExceptionObjectForThread(lldb::ThreadSP thread_sp);
 
 private:
+  TypeAndOrName FindTypeInfoWithClangVTable(
+      ValueObject &in_value,
+      const LanguageRuntime::VTableInfo &vtable_info) const;
+
   TypeAndOrName GetTypeInfo(ValueObject &in_value,
                             const LanguageRuntime::VTableInfo &vtable_info);
 
