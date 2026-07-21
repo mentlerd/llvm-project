@@ -86,13 +86,13 @@ ItaniumABIRuntime::GetTypeInfo(ValueObject &in_value,
       return type_info;
 
     if (vtable_info.symbol) {
-      type_info = FindTypeInfoWithClangVTable(in_value, vtable_info);
+      type_info = FindTypeInfoWithDemangling(in_value, vtable_info);
       if (type_info) {
         SetDynamicTypeInfo(vtable_info.addr, type_info);
         return type_info;
       }
 
-      type_info = FindTypeInfoWithDemangling(in_value, vtable_info);
+      type_info = FindTypeInfoWithClangVTable(in_value, vtable_info);
       if (type_info) {
         SetDynamicTypeInfo(vtable_info.addr, type_info);
         return type_info;
