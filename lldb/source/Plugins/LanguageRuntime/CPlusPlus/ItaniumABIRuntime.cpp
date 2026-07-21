@@ -91,16 +91,24 @@ ItaniumABIRuntime::GetTypeInfo(ValueObject &in_value,
         SetDynamicTypeInfo(vtable_info.addr, type_info);
         return type_info;
       }
+
+      type_info = FindTypeInfoWithDemangling(in_value, vtable_info);
+      if (type_info) {
+        SetDynamicTypeInfo(vtable_info.addr, type_info);
+        return type_info;
+      }
     }
   }
+  return TypeAndOrName();
+}
 
+TypeAndOrName ItaniumABIRuntime::FindTypeInfoWithDemangling(
+    ValueObject &in_value,
+    const LanguageRuntime::VTableInfo &vtable_info) const {
   if (vtable_info.addr.IsSectionOffset()) {
-    // See if we have cached info for this type already
-    TypeAndOrName type_info = GetDynamicTypeInfo(vtable_info.addr);
-    if (type_info)
-      return type_info;
-
     if (vtable_info.symbol) {
+      TypeAndOrName type_info;
+
       Log *log = GetLog(LLDBLog::Object);
       llvm::StringRef symbol_name =
           vtable_info.symbol->GetMangled().GetDemangledName().GetStringRef();
@@ -208,8 +216,6 @@ ItaniumABIRuntime::GetTypeInfo(ValueObject &in_value,
                   in_value.GetPointerValue().address,
                   in_value.GetTypeName().AsCString(""));
       }
-      if (type_info)
-        SetDynamicTypeInfo(vtable_info.addr, type_info);
       return type_info;
     }
   }
